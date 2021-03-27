@@ -2,13 +2,18 @@ cmake_minimum_required(VERSION 3.0.2)
 project(iort_lib)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++14 -fPIC)
+add_compile_options(-fPIC)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 find_package(jsoncpp REQUIRED)
+
+## Local dependencies
+add_subdirectory(dep)
 
 ###################################
 ## catkin specific configuration ##
@@ -44,6 +49,8 @@ set(iort_SRCS
 ## Your package locations should be listed before other locations
 include_directories(
     inc
+    lib
+    dep
     ${catkin_INCLUDE_DIRS}
 )
 
@@ -54,6 +61,7 @@ add_library(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME} 
     jsoncpp_lib
+    cpr::cpr
     ${catkin_LIBRARIES}
 )
 
