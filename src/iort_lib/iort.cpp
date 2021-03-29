@@ -7,39 +7,65 @@
 #include <cpr/cpr.h>
 #include "iort_lib/iort.hpp"
 
+#include <chrono>
+using namespace std::chrono_literals;
+
 namespace iort
 {
 
-template<typename TDuration>
-Subscriber::Subscriber(const std::string& uuid_, void (* cb_)(Json::Value &), 
-            TDuration timeout)
+Subscriber::Subscriber(const std::string& uuid_, void (* cb_)(Json::Value), 
+                       int32_t timeout_)
 {
     // TODO
-}
+    uuid = uuid_;
+    cb = cb_;
+    timeout = timeout_;
 
-Subscriber::Subscriber(const std::string& uuid_, void (* cb_)(Json::Value &))
-{
-    // TODO
+    running = false;
+    running = start();
 }
 
 Subscriber::~Subscriber()
 {
-    // TODO
+    stop();
 }
 
 bool Subscriber::isRunning(void)
 {
-    // TODO
+    return running;
 }
 
-void Subscriber::start(void)
+bool Subscriber::start(void)
 {
-    // TODO
+    if (running) return false;
+    exitCond = new std::promise<void>();
+    subThread = std::thread(&Subscriber::run, this, 
+                            std::move(exitCond->get_future()));
 }
 
-void Subscriber::stop(void)
+bool Subscriber::stop(void)
 {
-    // TODO
+    if (!running) return false;
+    exitCond->set_value();
+    subThread.join();
+}
+
+void Subscriber::run (std::future<void> exitSig)
+{
+    while (exitSig.wait_for(1ms) == std::future_status::timeout) {
+        cpr::Response r = cpr::Post(
+            cpr::Url{"https://todo.org"},
+            cpr::Payload{{"key", "value"}},
+            cpr::Timeout(timeout)
+        );
+
+        if (r.elapsed * 1000 + 1 - timeout > 0) break;
+
+        Json::Value data;
+        // TODO process to Json::Value
+        cb(data);
+    }
+    running = false;
 }
 
 Core::Core()
@@ -52,19 +78,13 @@ Core::~Core()
     // TODO
 }
 
-template<typename TDuration>
-Json::Value & Core::get(const std::string& uuid_, TDuration timeout)
-{
-    // TODO
-}
-
-Json::Value & Core::get(const std::string& uuid_)
+Json::Value Core::get(const std::string& uuid_, int32_t timeout_)
 {
     // TODO
 }
 
 Subscriber Core::subscribe(const std::string& uuid_, 
-                           void (* cb_)(Json::Value &))
+                           void (* cb_)(Json::Value))
 {
     // TODO
 }

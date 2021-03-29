@@ -13,9 +13,8 @@
 #define iort_HPP
 
 #include <json/json.h>
-#include <chrono>
-
-using namespace std::chrono_literals;
+#include <thread>
+#include <future>
 
 namespace iort {
 
@@ -23,20 +22,28 @@ class Subscriber
 {
 private:
     std::string uuid;
+
     void (* cb)(Json::Value);
 
-public:
-    template<typename TDuration>
-    Subscriber(const std::string& uuid_, void (* cb_)(Json::Value &), 
-               TDuration timeout);
+    int32_t timeout;
 
-    Subscriber(const std::string& uuid_, void (* cb_)(Json::Value &));
+    std::promise<void> * exitCond;
+
+    std::thread subThread;
+
+    bool running;
+
+    void run(std::future<void> exitSig);
+
+public:
+    Subscriber(const std::string& uuid_, void (* cb_)(Json::Value), 
+               int32_t timeout_ = 1000);
 
     ~Subscriber();
 
     bool isRunning(void);
-    void start(void);
-    void stop(void);
+    bool start(void);
+    bool stop(void);
 };
 
 class Core
@@ -47,12 +54,9 @@ public:
     Core();
     ~Core();
 
-    template<typename TDuration>
-    Json::Value & get(const std::string& uuid_, TDuration timeout);
+    Json::Value get(const std::string& uuid_, int32_t timeout_ = 1000);
 
-    Json::Value & get(const std::string& uuid_);
-
-    Subscriber subscribe(const std::string& uuid_, void (* cb_)(Json::Value &));
+    Subscriber subscribe(const std::string& uuid_, void (* cb_)(Json::Value));
 
 };
 
