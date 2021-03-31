@@ -10,16 +10,24 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
+#include <iostream>
+
 namespace iort
 {
 
-Subscriber::Subscriber(const std::string& uuid_, void (* cb_)(Json::Value), 
-                       int32_t timeout_)
+static const std::string FUNCTION_URL = "https://sf0nkng705.execute-api.us-east-2.amazonaws.com/prod/get-latest-by-uuid";
+
+Subscriber::Subscriber(const std::string& uuid_, 
+            const boost::function<void(Json::Value)> & cb_, 
+            const int32_t timeout_,
+            const int32_t timeout_count_)
 {
-    // TODO
     uuid = uuid_;
+    msg_uuid = "null";
     cb = cb_;
     timeout = timeout_;
+    timeout_count = 0;
+    max_timeout_count = timeout_count_;
 
     running = false;
     running = start();
@@ -41,6 +49,7 @@ bool Subscriber::start(void)
     exitCond = new std::promise<void>();
     subThread = std::thread(&Subscriber::run, this, 
                             std::move(exitCond->get_future()));
+    return true;
 }
 
 bool Subscriber::stop(void)
@@ -48,24 +57,43 @@ bool Subscriber::stop(void)
     if (!running) return false;
     exitCond->set_value();
     subThread.join();
+    running = false;
+    return true;
 }
 
 void Subscriber::run (std::future<void> exitSig)
 {
     while (exitSig.wait_for(1ms) == std::future_status::timeout) {
         cpr::Response r = cpr::Post(
-            cpr::Url{"https://todo.org"},
-            cpr::Payload{{"key", "value"}},
-            cpr::Timeout(timeout)
+            cpr::Url{FUNCTION_URL},
+            cpr::Body{"{\"uuid\" : \"" + uuid + "\"}"}
         );
 
-        if (r.elapsed * 1000 + 1 - timeout > 0) break;
+        if (r.elapsed * 1000 + 1 - timeout > 0) {
+            if (++timeout_count >= max_timeout_count) break;
+        } else {
+            timeout_count = 0;
+        }
 
-        Json::Value data;
-        // TODO process to Json::Value
-        cb(data);
+        /*
+            test latency
+        */
+        const auto epoch = std::chrono::system_clock::now().time_since_epoch();
+        const auto us = std::chrono::duration_cast<std::chrono::microseconds>(epoch);
+        
+        Json::Value payload;
+        Json::Reader reader;
+        if (reader.parse(r.text, payload)) {
+            // int64_t then = payload["dev_time"].asInt64();
+            // std::cout << "latency: " << us.count() - then << "\n";
+            // std::cout << payload.toStyledString();
+            std::string new_msg_uuid = payload["aws_msg_uuid"].asString();
+            if (msg_uuid != new_msg_uuid) {
+                msg_uuid = new_msg_uuid;
+                cb(payload["data"]);
+            }
+        }
     }
-    running = false;
 }
 
 Core::Core()
@@ -79,12 +107,6 @@ Core::~Core()
 }
 
 Json::Value Core::get(const std::string& uuid_, int32_t timeout_)
-{
-    // TODO
-}
-
-Subscriber Core::subscribe(const std::string& uuid_, 
-                           void (* cb_)(Json::Value))
 {
     // TODO
 }
