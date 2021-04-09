@@ -10,7 +10,11 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
+#define DEBUG
+#ifdef DEBUG
 #include <iostream>
+#include <deque>
+#endif
 
 namespace iort
 {
@@ -63,11 +67,19 @@ bool Subscriber::stop(void)
 
 void Subscriber::run (std::future<void> exitSig)
 {
+#ifdef DEBUG
+    std::deque<int64_t> running_avg;
+#endif
     while (exitSig.wait_for(1ms) == std::future_status::timeout) {
         cpr::Response r = cpr::Post(
             cpr::Url{FUNCTION_URL},
-            cpr::Body{"{\"uuid\" : \"" + uuid + "\"}"}
+            cpr::Body{"{\"uuid\" : \"" + uuid + "\",\"points\" : \"1\"}"}
         );
+
+        if (r.status_code != 200) {
+            std::cout << r.text << "\n";
+            continue;
+        }
 
         if (r.elapsed * 1000 + 1 - timeout > 0) {
             if (++timeout_count >= max_timeout_count) break;
@@ -75,23 +87,29 @@ void Subscriber::run (std::future<void> exitSig)
             timeout_count = 0;
         }
 
-        /*
-            test latency
-        */
-        const auto epoch = std::chrono::system_clock::now().time_since_epoch();
-        const auto us = std::chrono::duration_cast<std::chrono::microseconds>(epoch);
-        
         Json::Value payload;
         Json::Reader reader;
         if (reader.parse(r.text, payload)) {
-            // int64_t then = payload["dev_time"].asInt64();
-            // std::cout << "latency: " << us.count() - then << "\n";
-            // std::cout << payload.toStyledString();
-            std::string new_msg_uuid = payload["aws_msg_uuid"].asString();
-            if (msg_uuid != new_msg_uuid) {
-                msg_uuid = new_msg_uuid;
-                cb(payload["data"]);
+#ifdef DEBUG
+            const auto epoch = std::chrono::system_clock::now().time_since_epoch();
+            const auto us = std::chrono::duration_cast<std::chrono::microseconds>(epoch);
+            int64_t then = payload["time"].asInt64();
+            running_avg.push_back(us.count() - then);
+            if (running_avg.size() > 64) {
+                running_avg.pop_front();
             }
+            int64_t avg = 0;
+            for (int64_t lat : running_avg) {
+                avg += lat;
+            }
+            std::cout << "latency: " << avg / running_avg.size() << "\n";
+            // std::cout << payload.toStyledString();
+#endif
+            // std::string new_msg_uuid = payload["aws_msg_uuid"].asString();
+            // if (msg_uuid != new_msg_uuid) {
+            //     msg_uuid = new_msg_uuid;
+            //     cb(payload["data"]);
+            // }
         }
     }
 }
