@@ -1,6 +1,6 @@
 /*
 
-    iort.hpp - header file for the internet of robotic things compatibility 
+    iort.hpp - header file for the internet of robotic things compatibility
     layer for C++. This library wraps calls to the cloud API and provides a
     simplified interface to IoT endpoints.
 
@@ -18,8 +18,8 @@
 #include <boost/function.hpp>
 #include <boost/bind.hpp>
 
-namespace iort {
-
+namespace iort
+{
 class Subscriber
 {
 private:
@@ -35,7 +35,7 @@ private:
 
     int32_t max_timeout_count;
 
-    std::promise<void> * exitCond;
+    std::promise<void>* exitCond;
 
     std::thread subThread;
 
@@ -44,8 +44,8 @@ private:
     void run(std::future<void> exitSig);
 
 public:
-    Subscriber(const std::string& uuid_, 
-               const boost::function<void(Json::Value)> & cb_, 
+    Subscriber(const std::string& uuid_,
+               const boost::function<void(Json::Value)>& cb_,
                const int32_t timeout_ = 1000,
                const int32_t timeout_count_ = 10);
 
@@ -61,7 +61,6 @@ public:
 class Core
 {
 private:
-
 public:
     Core();
 
@@ -69,25 +68,23 @@ public:
 
     Json::Value get(const std::string& uuid_, int32_t timeout_ = 1000);
 
-    Subscriber * subscribe(const std::string& uuid_, 
-               void (* cb_)(Json::Value), 
-               const int32_t timeout_ = 1000,
-               const int32_t timeout_count_ = 10)
+    Subscriber* subscribe(const std::string& uuid_, void (*cb_)(Json::Value),
+                          const int32_t timeout_ = 1000,
+                          const int32_t timeout_count_ = 10)
     {
-        return new Subscriber(uuid_, boost::function<void(Json::Value)>(cb_), timeout_);
+        return new Subscriber(uuid_, boost::function<void(Json::Value)>(cb_),
+                              timeout_);
     }
 
-    template<class T>
-    Subscriber * subscribe(const std::string& uuid_, 
-               void(T::*cb_)(Json::Value),
-               T * obj, 
-               const int32_t timeout_ = 1000,
-               const int32_t timeout_count_ = 10)
+    template <class T>
+    Subscriber* subscribe(const std::string& uuid_, void (T::*cb_)(Json::Value),
+                          T* obj, const int32_t timeout_ = 1000,
+                          const int32_t timeout_count_ = 10)
     {
         return new Subscriber(uuid_, boost::bind(cb_, obj, _1), timeout_);
     }
 };
 
-} // end namespace iort
+}    // end namespace iort
 
-#endif  // end iort_HPP
+#endif    // end iort_HPP
