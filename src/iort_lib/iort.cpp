@@ -10,7 +10,7 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
-// #define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #include <iostream>
 #include <deque>
@@ -19,8 +19,8 @@ using namespace std::chrono_literals;
 namespace iort
 {
 static const std::string FUNCTION_URL =
-    "https://sf0nkng705.execute-api.us-east-2.amazonaws.com/prod/"
-    "get-latest-by-uuid";
+    "https://5p1y6wnp3k.execute-api.us-west-2.amazonaws.com/default/"
+    "iort_lib_query";
 
 Subscriber::Subscriber(const std::string& uuid_,
                        const boost::function<void(Json::Value)>& cb_,
@@ -72,9 +72,13 @@ void Subscriber::run(std::future<void> exitSig)
 #endif
     while (exitSig.wait_for(1ms) == std::future_status::timeout)
     {
-        cpr::Response r = cpr::Post(
-            cpr::Url{ FUNCTION_URL },
-            cpr::Body{ "{\"uuid\" : \"" + uuid + "\",\"points\" : \"1\"}" });
+        cpr::Response r =
+            cpr::Post(cpr::Url{ FUNCTION_URL },
+                      cpr::Parameters{ { "uuid", uuid }, { "points", "1" } });
+
+#ifdef DEBUG
+        std::cout << r.text << "\n";
+#endif
 
         if (r.status_code != 200)
         {
