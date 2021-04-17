@@ -22,16 +22,60 @@ static const std::string FUNCTION_URL =
     "https://5p1y6wnp3k.execute-api.us-west-2.amazonaws.com/default/"
     "iort_lib_query";
 
+inline bool inline_get(const std::string& uuid, Json::Value& ret,
+                       int32_t timeout = 1000)
+{
+    cpr::Response r =
+        cpr::Post(cpr::Url{ FUNCTION_URL },
+                  cpr::Parameters{ { "uuid", uuid }, { "op", "get" } },
+                  cpr::Timeout(timeout));
+
+    // return false if server error or timeout
+    if ((r.status_code != 200) || ((r.elapsed * 1000 + 1 - timeout) > 0))
+    {
+#ifdef DEBUG
+        std::cout << "status: " << r.status_code << "\ntext: " << r.text
+                  << "\n";
+#endif
+        return false;
+    }
+
+    Json::Reader reader;
+    return reader.parse(r.text, ret);
+}
+
+inline bool inline_query(const std::string& query_string, Json::Value& ret,
+                         int32_t timeout = 1000)
+{
+    cpr::Response r =
+        cpr::Post(cpr::Url{ FUNCTION_URL },
+                  cpr::Parameters{ { "qs", query_string }, { "op", "query" } },
+                  cpr::Timeout(timeout));
+
+    // return false if server error or timeout
+    if ((r.status_code != 200) || ((r.elapsed * 1000 + 1 - timeout) > 0))
+    {
+#ifdef DEBUG
+        std::cout << "status: " << r.status_code << "\ntext: " << r.text
+                  << "\n";
+#endif
+        return false;
+    }
+
+    Json::Reader reader;
+    return reader.parse(r.text, ret);
+}
+
 Subscriber::Subscriber(const std::string& uuid_,
-                       const boost::function<void(Json::Value)>& cb_,
-                       const int32_t timeout_, const int32_t timeout_count_)
+                       const std::function<void(Json::Value)>& cb_,
+                       const int32_t timeout_, const int32_t failure_count_)
 {
     uuid = uuid_;
     msg_uuid = "null";
     cb = cb_;
     timeout = timeout_;
-    timeout_count = 0;
-    max_timeout_count = timeout_count_;
+    failure_count = 0;
+    max_failure_count = failure_count_;
 
     running = false;
     running = start();
@@ -72,31 +116,8 @@ void Subscriber::run(std::future<void> exitSig)
 #endif
     while (exitSig.wait_for(1ms) == std::future_status::timeout)
     {
-        cpr::Response r =
-            cpr::Post(cpr::Url{ FUNCTION_URL },
-                      cpr::Parameters{ { "uuid", uuid }, { "points", "1" } });
-
-#ifdef DEBUG
-        std::cout << r.text << "\n";
-#endif
-
-        if (r.status_code != 200)
-        {
-            continue;
-        }
-
-        if (r.elapsed * 1000 + 1 - timeout > 0)
-        {
-            if (++timeout_count >= max_timeout_count) break;
-        }
-        else
-        {
-            timeout_count = 0;
-        }
-
         Json::Value payload;
-        Json::Reader reader;
-        if (reader.parse(r.text, payload))
+        if (inline_get(uuid, payload))
         {
 #ifdef DEBUG
             const auto epoch =
@@ -124,6 +145,10 @@ void Subscriber::run(std::future<void> exitSig)
                 cb(payload["data"]);
             }
         }
+        else if (++failure_count >= max_failure_count)
+        {
+            break;
+        }
     }
 }
 
@@ -137,9 +162,15 @@ Core::~Core()
     // TODO
 }
 
-Json::Value Core::get(const std::string& uuid_, int32_t timeout_)
+bool Core::get(const std::string& uuid, Json::Value& ret, int32_t timeout)
 {
-    // TODO
+    return inline_get(uuid, ret, timeout);
+}
+
+bool Core::query(const std::string& query_string, Json::Value& ret,
+                 int32_t timeout)
+{
+    return inline_query(query_string, ret, timeout);
 }
 
 }    // end namespace iort

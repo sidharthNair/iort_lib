@@ -15,8 +15,7 @@
 #include <json/json.h>
 #include <thread>
 #include <future>
-#include <boost/function.hpp>
-#include <boost/bind.hpp>
+#include <functional>
 
 namespace iort
 {
@@ -27,13 +26,13 @@ private:
 
     std::string msg_uuid;
 
-    boost::function<void(Json::Value)> cb;
+    std::function<void(Json::Value)> cb;
 
     int32_t timeout;
 
-    int32_t timeout_count;
+    int32_t failure_count;
 
-    int32_t max_timeout_count;
+    int32_t max_failure_count;
 
     std::promise<void>* exitCond;
 
@@ -45,9 +44,9 @@ private:
 
 public:
     Subscriber(const std::string& uuid_,
-               const boost::function<void(Json::Value)>& cb_,
+               const std::function<void(Json::Value)>& cb_,
                const int32_t timeout_ = 1000,
-               const int32_t timeout_count_ = 10);
+               const int32_t failure_count_ = 10);
 
     ~Subscriber();
 
@@ -66,22 +65,26 @@ public:
 
     ~Core();
 
-    Json::Value get(const std::string& uuid_, int32_t timeout_ = 1000);
+    bool get(const std::string& uuid, Json::Value& ret, int32_t timeout = 1000);
+
+    bool query(const std::string& query_string, Json::Value& ret,
+               int32_t timeout = 1000);
 
     Subscriber* subscribe(const std::string& uuid_, void (*cb_)(Json::Value),
                           const int32_t timeout_ = 1000,
-                          const int32_t timeout_count_ = 10)
+                          const int32_t failure_count_ = 10)
     {
-        return new Subscriber(uuid_, boost::function<void(Json::Value)>(cb_),
-                              timeout_);
+        return new Subscriber(uuid_, std::function<void(Json::Value)>(cb_),
+                              timeout_, failure_count_);
     }
 
     template <class T>
     Subscriber* subscribe(const std::string& uuid_, void (T::*cb_)(Json::Value),
                           T* obj, const int32_t timeout_ = 1000,
-                          const int32_t timeout_count_ = 10)
+                          const int32_t failure_count_ = 10)
     {
-        return new Subscriber(uuid_, boost::bind(cb_, obj, _1), timeout_);
+        return new Subscriber(uuid_, std::bind(cb_, obj, std::placeholders::_1),
+                              timeout_, failure_count_);
     }
 };
 
