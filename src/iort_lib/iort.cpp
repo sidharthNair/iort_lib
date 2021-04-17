@@ -10,7 +10,7 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
-// #define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #include <iostream>
 #include <deque>
@@ -69,7 +69,7 @@ inline bool inline_query(const std::string& query_string, Json::Value& ret,
 Subscriber::Subscriber(const std::string& uuid_,
                        const std::function<void(Json::Value)>& cb_,
                        CallbackQueue& cb_queue_, const int32_t timeout_,
-                       const int32_t failure_count_, const int32_t rate_)
+                       const int32_t failure_count_)
     : cb_queue(cb_queue_)
 {
     uuid = uuid_;
@@ -78,7 +78,6 @@ Subscriber::Subscriber(const std::string& uuid_,
     timeout = timeout_;
     failure_count = 0;
     max_failure_count = failure_count_;
-    rate = rate_;
 
     running = false;
     running = start();
@@ -114,48 +113,35 @@ bool Subscriber::stop(void)
 
 void Subscriber::run(std::future<void> exitSig)
 {
-    const int32_t rateus = 1000000 / rate;
+    const int32_t rateus = 100000;
     auto cur_time = std::chrono::system_clock::now();
-#ifdef DEBUG
-    std::deque<int64_t> running_avg;
-#endif
     while (exitSig.wait_until(cur_time + std::chrono::microseconds(rateus)) ==
            std::future_status::timeout)
     {
         cur_time = std::chrono::system_clock::now();
-        Json::Value payload;
-        if (inline_get(uuid, payload))
-        {
+
+        std::thread th([this]() {
+            Json::Value payload;
+            if (inline_get(uuid, payload, 2000))
+            {
 #ifdef DEBUG
-            const auto epoch =
-                std::chrono::system_clock::now().time_since_epoch();
-            const auto us =
-                std::chrono::duration_cast<std::chrono::microseconds>(epoch);
-            int64_t then = payload["time"].asInt64();
-            running_avg.push_back(us.count() - then);
-            if (running_avg.size() > 64)
-            {
-                running_avg.pop_front();
-            }
-            int64_t avg = 0;
-            for (int64_t lat : running_avg)
-            {
-                avg += lat;
-            }
-            std::cout << "latency: " << avg / running_avg.size() << "\n";
-            // std::cout << payload.toStyledString();
+                const auto epoch =
+                    std::chrono::system_clock::now().time_since_epoch();
+                const auto us =
+                    std::chrono::duration_cast<std::chrono::microseconds>(epoch);
+                int64_t then = payload["time"].asInt64();
+                std::cout << "latency: " << us.count() - then << "\n";
 #endif
-            std::string new_msg_uuid = payload["msgid"].asString();
-            if (msg_uuid != new_msg_uuid)
-            {
-                msg_uuid = new_msg_uuid;
-                cb_queue.push({ cb, payload["data"] });
+                std::string new_msg_uuid = payload["msgid"].asString();
+                if (msg_uuid != new_msg_uuid)
+                {
+                    msg_uuid = new_msg_uuid;
+                    cb_queue.push({ cb, payload["data"] });
+                }
             }
-        }
-        else if (++failure_count >= max_failure_count)
-        {
-            break;
-        }
+        });
+
+        th.detach(); // we don't care about joining, just let it complete
     }
 }
 

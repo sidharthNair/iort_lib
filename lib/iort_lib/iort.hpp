@@ -45,8 +45,6 @@ private:
 
     int32_t max_failure_count;
 
-    int32_t rate;
-
     std::promise<void>* exitCond;
 
     std::thread subThread;
@@ -59,7 +57,7 @@ public:
     Subscriber(const std::string& uuid_,
                const std::function<void(Json::Value)>& cb_,
                CallbackQueue& cb_queue_, const int32_t timeout_ = 1000,
-               const int32_t failure_count_ = 10, const int32_t rate_ = 60);
+               const int32_t failure_count_ = 10);
 
     ~Subscriber();
 
@@ -93,21 +91,19 @@ public:
 
     Subscriber* subscribe(const std::string& uuid_, void (*cb_)(Json::Value),
                           const int32_t timeout_ = 1000,
-                          const int32_t failure_count_ = 10,
-                          const int32_t rate_ = 60)
+                          const int32_t failure_count_ = 10)
     {
         return new Subscriber(uuid_, std::function<void(Json::Value)>(cb_),
-                              callbackQueue, timeout_, failure_count_, rate_);
+                              callbackQueue, timeout_, failure_count_);
     }
 
     template <class T>
     Subscriber* subscribe(const std::string& uuid_, void (T::*cb_)(Json::Value),
                           T* obj, const int32_t timeout_ = 1000,
-                          const int32_t failure_count_ = 10,
-                          const int32_t rate_ = 60)
+                          const int32_t failure_count_ = 10)
     {
         return new Subscriber(uuid_, std::bind(cb_, obj, std::placeholders::_1),
-                              callbackQueue, timeout_, failure_count_, rate_);
+                              callbackQueue, timeout_, failure_count_);
     }
 };
 
