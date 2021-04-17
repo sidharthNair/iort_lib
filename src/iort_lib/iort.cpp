@@ -10,7 +10,7 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
 #include <iostream>
 #include <deque>
@@ -68,7 +68,9 @@ inline bool inline_query(const std::string& query_string, Json::Value& ret,
 
 Subscriber::Subscriber(const std::string& uuid_,
                        const std::function<void(Json::Value)>& cb_,
-                       const int32_t timeout_, const int32_t failure_count_)
+                       CallbackQueue& cb_queue_, const int32_t timeout_,
+                       const int32_t failure_count_, const int32_t rate_)
+    : cb_queue(cb_queue_)
 {
     uuid = uuid_;
     msg_uuid = "null";
@@ -76,6 +78,7 @@ Subscriber::Subscriber(const std::string& uuid_,
     timeout = timeout_;
     failure_count = 0;
     max_failure_count = failure_count_;
+    rate = rate_;
 
     running = false;
     running = start();
@@ -111,11 +114,15 @@ bool Subscriber::stop(void)
 
 void Subscriber::run(std::future<void> exitSig)
 {
+    const int32_t rateus = 1000000 / rate;
+    auto cur_time = std::chrono::system_clock::now();
 #ifdef DEBUG
     std::deque<int64_t> running_avg;
 #endif
-    while (exitSig.wait_for(1ms) == std::future_status::timeout)
+    while (exitSig.wait_until(cur_time + std::chrono::microseconds(rateus)) ==
+           std::future_status::timeout)
     {
+        cur_time = std::chrono::system_clock::now();
         Json::Value payload;
         if (inline_get(uuid, payload))
         {
@@ -142,7 +149,7 @@ void Subscriber::run(std::future<void> exitSig)
             if (msg_uuid != new_msg_uuid)
             {
                 msg_uuid = new_msg_uuid;
-                cb(payload["data"]);
+                cb_queue.push({ cb, payload["data"] });
             }
         }
         else if (++failure_count >= max_failure_count)
@@ -154,12 +161,32 @@ void Subscriber::run(std::future<void> exitSig)
 
 Core::Core()
 {
-    // TODO
+    exitCond = new std::promise<void>();
+    callbackThread =
+        std::thread(&Core::run, this, std::move(exitCond->get_future()));
 }
 
 Core::~Core()
 {
-    // TODO
+    exitCond->set_value();
+    callbackThread.join();
+}
+
+void Core::run(std::future<void> extiSig)
+{
+    while (extiSig.wait_for(1ms) == std::future_status::timeout)
+    {
+        if (!callbackQueue.empty())
+        {
+#ifdef DEBUG
+            std::cout << "callback called"
+                      << "\n";
+#endif
+            CallbackQueueItem qitem = callbackQueue.front();
+            qitem.cb(qitem.data);
+            callbackQueue.pop();
+        }
+    }
 }
 
 bool Core::get(const std::string& uuid, Json::Value& ret, int32_t timeout)
