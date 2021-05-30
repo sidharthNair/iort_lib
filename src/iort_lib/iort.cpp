@@ -10,7 +10,7 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
 #include <iostream>
 #include <deque>
@@ -119,29 +119,24 @@ void Subscriber::run(std::future<void> exitSig)
            std::future_status::timeout)
     {
         cur_time = std::chrono::system_clock::now();
-
-        std::thread th([this]() {
-            Json::Value payload;
-            if (inline_get(uuid, payload, 2000))
-            {
+        Json::Value payload;
+        if (inline_get(uuid, payload, 2000))
+        {
 #ifdef DEBUG
-                const auto epoch =
-                    std::chrono::system_clock::now().time_since_epoch();
-                const auto us =
-                    std::chrono::duration_cast<std::chrono::microseconds>(epoch);
-                int64_t then = payload["time"].asInt64();
-                std::cout << "latency: " << us.count() - then << "\n";
+            const auto epoch =
+                std::chrono::system_clock::now().time_since_epoch();
+            const auto us =
+                std::chrono::duration_cast<std::chrono::microseconds>(epoch);
+            int64_t then = payload["time"].asInt64();
+            std::cout << "latency: " << us.count() - then << "\n";
 #endif
-                std::string new_msg_uuid = payload["msgid"].asString();
-                if (msg_uuid != new_msg_uuid)
-                {
-                    msg_uuid = new_msg_uuid;
-                    cb_queue.push({ cb, payload["data"] });
-                }
+            std::string new_msg_uuid = payload["msgid"].asString();
+            if (msg_uuid != new_msg_uuid)
+            {
+                msg_uuid = new_msg_uuid;
+                cb_queue.push({ cb, payload["data"] });
             }
-        });
-
-        th.detach(); // we don't care about joining, just let it complete
+        }
     }
 }
 
