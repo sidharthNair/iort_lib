@@ -186,7 +186,7 @@ Simply clone the repository into your catkin workspace and run `catkin build`:
 
 ```sh
 cd ~/catkin_ws/src
-git clone https://github.com/PaperFanz/iort_lib
+git clone --recursive https://github.com/PaperFanz/iort_lib
 catkin build iort_lib
 ```
 
