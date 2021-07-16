@@ -4,9 +4,11 @@
 
 */
 
+#include <mosquitto.h>
 #include <cpr/cpr.h>
 #include "iort_lib/iort.hpp"
 
+#include <string>
 #include <chrono>
 using namespace std::chrono_literals;
 
@@ -16,11 +18,34 @@ using namespace std::chrono_literals;
 #include <deque>
 #endif
 
+std::string topic;
+struct mosquitto *mosq;
+bool new_msg = false;
+Json::Value payload;
+
+void on_connect(struct mosquitto *mosq, void *obj, int rc) {
+    if (rc) {
+        exit(-1);
+    }
+    mosquitto_subscribe(mosq, NULL, topic.c_str(), 0);
+}
+
+void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
+#ifdef DEBUG
+    std::cout << "New message with topic " << msg->topic << " " << (char *) msg->payload << std::endl;
+#endif
+    Json::Reader reader;
+    reader.parse((char *) msg->payload, payload);
+    new_msg = true;
+}
+
 namespace iort
 {
 static const std::string FUNCTION_URL =
     "https://5p1y6wnp3k.execute-api.us-west-2.amazonaws.com/default/"
     "iort_lib_query";
+static const std::string ENDPOINT_URL =
+             "a22ztr6so9o7g8-ats.iot.us-west-2.amazonaws.com";
 
 inline bool inline_get(const std::string& uuid, Json::Value& ret,
                        int32_t timeout = 1000)
@@ -76,6 +101,7 @@ Subscriber::Subscriber(const std::string& uuid_,
     msg_uuid = "null";
     cb = cb_;
     timeout = timeout_;
+    topic = "device/" + uuid_ + "/data";
     failure_count = 0;
     max_failure_count = failure_count_;
 
@@ -96,6 +122,19 @@ bool Subscriber::isRunning(void)
 bool Subscriber::start(void)
 {
     if (running) return false;
+    int rc, id = 1;
+    mosquitto_lib_init();
+    mosq = mosquitto_new("subscriber", true, &id);
+    mosquitto_connect_callback_set(mosq, on_connect);
+    mosquitto_message_callback_set(mosq, on_message);
+    mosquitto_tls_set(mosq, "build/iort_lib/aws-root-ca.pem", NULL, "build/iort_lib/certificate.pem.crt", "build/iort_lib/private.pem.key", NULL);
+    rc = mosquitto_connect(mosq, ENDPOINT_URL.c_str(), 8883, 10);
+#ifdef DEBUG
+    if (rc) {
+    	  printf("Could not connect to broker: %d\n", rc);
+    }
+#endif
+    mosquitto_loop_start(mosq);
     exitCond = new std::promise<void>();
     subThread =
         std::thread(&Subscriber::run, this, std::move(exitCond->get_future()));
@@ -105,6 +144,10 @@ bool Subscriber::start(void)
 bool Subscriber::stop(void)
 {
     if (!running) return false;
+    mosquitto_loop_stop(mosq, true);
+    mosquitto_disconnect(mosq);
+    mosquitto_destroy(mosq);
+    mosquitto_lib_cleanup();
     exitCond->set_value();
     subThread.join();
     running = false;
@@ -113,14 +156,11 @@ bool Subscriber::stop(void)
 
 void Subscriber::run(std::future<void> exitSig)
 {
-    const int32_t rateus = 100000;
     auto cur_time = std::chrono::system_clock::now();
-    while (exitSig.wait_until(cur_time + std::chrono::microseconds(rateus)) ==
-           std::future_status::timeout)
+    while (exitSig.wait_for(1ms) == std::future_status::timeout)
     {
         cur_time = std::chrono::system_clock::now();
-        Json::Value payload;
-        if (inline_get(uuid, payload, 2000))
+        if (new_msg)
         {
 #ifdef DEBUG
             const auto epoch =
@@ -130,12 +170,8 @@ void Subscriber::run(std::future<void> exitSig)
             int64_t then = payload["time"].asInt64();
             std::cout << "latency: " << us.count() - then << "\n";
 #endif
-            std::string new_msg_uuid = payload["msgid"].asString();
-            if (msg_uuid != new_msg_uuid)
-            {
-                msg_uuid = new_msg_uuid;
-                cb_queue.push({ cb, payload["data"] });
-            }
+            cb_queue.push({ cb, payload["data"] });
+            new_msg = false;
         }
     }
 }

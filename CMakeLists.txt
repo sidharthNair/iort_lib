@@ -62,9 +62,15 @@ add_library(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME} 
     jsoncpp_lib
+    mosquitto
     cpr::cpr
     ${catkin_LIBRARIES}
 )
+
+## Copy Certificates into build directory
+FILE(COPY certs/aws-root-ca.pem DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+FILE(COPY certs/certificate.pem.crt DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+FILE(COPY certs/private.pem.key DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
 #############
 ## Install ##
