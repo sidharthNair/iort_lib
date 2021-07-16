@@ -180,9 +180,38 @@ Click `Function Overview>Add Trigger` and select `API Gateway`. Choose `Create a
 static const std::string FUNCTION_URL = "copy url here";
 ```
 
+## Configuring the project for MQTT subscription
+
+For this section you will need your Thing's Rest API Endpoint URL ([AWS IoT Core page](https://us-west-2.console.aws.amazon.com/iot/home?region=us-west-2#/dashboard) and navigate to `Manage>Things>myEndpoint>Interact`) and certificates that you created when setting up [`iort_endpoint`](https://github.com/PaperFanz/iort_endpoint). 
+
+#### Endpoint URL
+
+In `src/iort_lib/iort.cpp` copy your Rest API Endpoint URL on the following declaration:
+
+```cpp
+static const std::string FUNCTION_URL = "copy url here";
+```
+
+#### AWS Certificates
+
+Copy the certificate into `iort_lib/certs/certificate.pem.crt`.
+
+Copy the private key into `iort_lib/certs/private.pem.key`.
+
+Copy the root CA into `iort_lib/certs/aws-root-ca.pem`.
+
 ## Cloning and Building
 
-Simply clone the repository into your catkin workspace and run `catkin build`:
+This project depends on [`mosquitto`](https://github.com/eclipse/mosquitto) which is used for MQTT subscription. This can be installed using the following commands:
+
+```sh
+sudo apt-get update
+sudo apt-get install libmosquitto-dev
+```
+
+The project also depends on [`Curl for People`](https://github.com/whoshuu/cpr) which allows us to programmatically query the Timestream database, but this is included as a submodule in the repository.
+
+Clone the repository into your catkin workspace and run `catkin build`:
 
 ```sh
 cd ~/catkin_ws/src
