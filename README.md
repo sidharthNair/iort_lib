@@ -189,7 +189,7 @@ For this section you will need your Thing's Rest API Endpoint URL ([AWS IoT Core
 In `src/iort_lib/iort.cpp` copy your Rest API Endpoint URL on the following declaration:
 
 ```cpp
-static const std::string FUNCTION_URL = "copy url here";
+static const std::string ENDPOINT_URL = "copy url here";
 ```
 
 #### AWS Certificates
@@ -202,7 +202,7 @@ Copy the root CA into `iort_lib/certs/aws-root-ca.pem`.
 
 ## Cloning and Building
 
-This project depends on [`mosquitto`](https://github.com/eclipse/mosquitto) which is used for MQTT subscription. This can be installed using the following commands:
+This project depends on [`Eclipse Mosquitto`](https://github.com/eclipse/mosquitto) which is used for MQTT subscription. This can be installed using the following commands:
 
 ```sh
 sudo apt-get update
