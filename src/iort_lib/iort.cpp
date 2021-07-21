@@ -12,40 +12,19 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
-// #define DEBUG
+#include <config.h>
+
+//#define DEBUG
 #ifdef DEBUG
 #include <iostream>
 #include <deque>
 #endif
 
-std::string topic;
-struct mosquitto *mosq;
-bool new_msg = false;
-Json::Value payload;
-
-void on_connect(struct mosquitto *mosq, void *obj, int rc) {
-    if (rc) {
-        exit(-1);
-    }
-    mosquitto_subscribe(mosq, NULL, topic.c_str(), 0);
-}
-
-void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
-#ifdef DEBUG
-    std::cout << "New message with topic " << msg->topic << " " << (char *) msg->payload << std::endl;
-#endif
-    Json::Reader reader;
-    reader.parse((char *) msg->payload, payload);
-    new_msg = true;
-}
-
 namespace iort
 {
-static const std::string FUNCTION_URL =
-    "https://5p1y6wnp3k.execute-api.us-west-2.amazonaws.com/default/"
-    "iort_lib_query";
-static const std::string ENDPOINT_URL =
-             "a22ztr6so9o7g8-ats.iot.us-west-2.amazonaws.com";
+
+static const std::string FUNCTION_URL = HTTP_ENDPOINT;
+static const std::string ENDPOINT_URL = MQTT_ENDPOINT;
 
 inline bool inline_get(const std::string& uuid, Json::Value& ret,
                        int32_t timeout = 1000)
@@ -91,6 +70,17 @@ inline bool inline_query(const std::string& query_string, Json::Value& ret,
     return reader.parse(r.text, ret);
 }
 
+void on_connect(struct mosquitto *mosq, void *obj, int rc) {
+    if (rc) {
+        exit(-1);
+    }
+    mosquitto_subscribe(mosq, NULL, ((Subscriber *)obj)->getTopic().c_str(), 0);
+}
+
+void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
+    ((Subscriber *)obj)->messageCallback((char *)msg->payload);
+}
+
 Subscriber::Subscriber(const std::string& uuid_,
                        const std::function<void(Json::Value)>& cb_,
                        CallbackQueue& cb_queue_, const int32_t timeout_,
@@ -124,7 +114,7 @@ bool Subscriber::start(void)
     if (running) return false;
     int rc, id = 1;
     mosquitto_lib_init();
-    mosq = mosquitto_new("subscriber", true, &id);
+    mosq = mosquitto_new("subscriber", true, this);
     mosquitto_connect_callback_set(mosq, on_connect);
     mosquitto_message_callback_set(mosq, on_message);
     mosquitto_tls_set(mosq, "build/iort_lib/aws-root-ca.pem", NULL, "build/iort_lib/certificate.pem.crt", "build/iort_lib/private.pem.key", NULL);
@@ -135,9 +125,6 @@ bool Subscriber::start(void)
     }
 #endif
     mosquitto_loop_start(mosq);
-    exitCond = new std::promise<void>();
-    subThread =
-        std::thread(&Subscriber::run, this, std::move(exitCond->get_future()));
     return true;
 }
 
@@ -148,32 +135,23 @@ bool Subscriber::stop(void)
     mosquitto_disconnect(mosq);
     mosquitto_destroy(mosq);
     mosquitto_lib_cleanup();
-    exitCond->set_value();
-    subThread.join();
     running = false;
     return true;
 }
 
-void Subscriber::run(std::future<void> exitSig)
-{
-    auto cur_time = std::chrono::system_clock::now();
-    while (exitSig.wait_for(1ms) == std::future_status::timeout)
-    {
-        cur_time = std::chrono::system_clock::now();
-        if (new_msg)
-        {
+void Subscriber::messageCallback(char *message) {
+    Json::Value payload;
+    reader.parse((char *) message, payload);
+    cb_queue.push({cb, payload["data"] });
 #ifdef DEBUG
-            const auto epoch =
-                std::chrono::system_clock::now().time_since_epoch();
-            const auto us =
-                std::chrono::duration_cast<std::chrono::microseconds>(epoch);
-            int64_t then = payload["time"].asInt64();
-            std::cout << "latency: " << us.count() - then << "\n";
+    std::cout << "New message with topic " << msg->topic << " " << (char *) msg->payload << std::endl;
+    const auto epoch =
+	    std::chrono::system_clock::now().time_since_epoch();
+    const auto us =
+	    std::chrono::duration_cast<std::chrono::microseconds>(epoch);
+    int64_t then = payload["time"].asInt64();
+    std::cout << "latency: " << us.count() - then << "\n";
 #endif
-            cb_queue.push({ cb, payload["data"] });
-            new_msg = false;
-        }
-    }
 }
 
 Core::Core()
@@ -191,7 +169,7 @@ Core::~Core()
 
 void Core::run(std::future<void> extiSig)
 {
-    while (extiSig.wait_for(1ms) == std::future_status::timeout)
+    while (true)
     {
         if (!callbackQueue.empty())
         {

@@ -39,6 +39,7 @@ set(iort_LIBS
 )
 
 set(iort_HDRS
+    inc/config.h
 )
 
 set(iort_SRCS
@@ -57,6 +58,7 @@ include_directories(
 ## Declare a C++ library
 add_library(${PROJECT_NAME}
     ${iort_LIBS}
+    ${iort_HDRS}
     ${iort_SRCS}
 )
 
