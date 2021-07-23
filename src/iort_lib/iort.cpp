@@ -122,7 +122,7 @@ bool Subscriber::stop(void)
 
 void Subscriber::run(std::future<void> exitSig)
 {
-    mqtt::async_client cli(ENDPOINT_URL, "subscriber_ " + id++);
+    mqtt::async_client cli(ENDPOINT_URL, "client_" + std::to_string(id++));
     auto sslopts = mqtt::ssl_options_builder()
                .private_key("build/iort_lib/private.pem.key")
 		.key_store("build/iort_lib/certificate.pem.crt")
@@ -134,7 +134,7 @@ void Subscriber::run(std::future<void> exitSig)
 		})
 					   .finalize();
     auto connOpts = mqtt::connect_options_builder()
-		.clean_session(false)
+		.clean_session(true)
 		.ssl(std::move(sslopts))
 		.finalize();
     cli.start_consuming();
@@ -144,16 +144,12 @@ void Subscriber::run(std::future<void> exitSig)
     auto tok = cli.connect(connOpts);
     auto rsp = tok->get_connect_response();
     if (!rsp.is_session_present())
-    	cli.subscribe(topic, 0)->wait();
-    const int32_t rateus = 1000;
-    auto cur_time = std::chrono::system_clock::now();
+    	cli.subscribe(topic, 1)->wait();
 #ifdef DEBUG
-    std::cout << "Waiting for messages on topic: '" << topic << "'" << std::endl;
+    std::cout << cli.get_client_id() << " waiting for messages on topic: '" << topic << "'" << std::endl;
 #endif
-    while (exitSig.wait_until(cur_time + std::chrono::microseconds(rateus)) ==
-           std::future_status::timeout)
+    while (exitSig.wait_for(1ms) == std::future_status::timeout)
     {
-    	cur_time = std::chrono::system_clock::now();
         Json::Value payload;
         auto msg = cli.consume_message();
         if (!msg) break;
