@@ -6,7 +6,7 @@
 
     Dependencies:
         - https://github.com/whoshuu/cpr (thank god no libcurl)
-        - https://github.com/eclipse/mosquitto (MQTT Client)
+        - https://github.com/eclipse/paho.mqtt.cpp (MQTT C++ Client)
         - https://github.com/open-source-parsers/jsoncpp
 
 */
