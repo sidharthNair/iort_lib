@@ -64,7 +64,8 @@ add_library(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME} 
     jsoncpp_lib
-    mosquitto
+    paho-mqttpp3
+    paho-mqtt3as
     cpr::cpr
     ${catkin_LIBRARIES}
 )

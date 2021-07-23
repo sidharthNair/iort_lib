@@ -31,9 +31,9 @@ typedef std::queue<CallbackQueueItem> CallbackQueue;
 
 class Subscriber
 {
-private:
-
-    struct mosquitto *mosq;
+private:	
+    	
+    static int id;
     	
     std::string topic;
     
@@ -52,8 +52,14 @@ private:
     int32_t failure_count;
 
     int32_t max_failure_count;
+    
+    std::promise<void>* exitCond;
+    
+    std::thread subThread;
 
     bool running;
+    
+    void run(std::future<void> exitSig);
     
 public:
     Subscriber(const std::string& uuid_,
@@ -68,12 +74,6 @@ public:
     bool start(void);
 
     bool stop(void);
-    
-    std::string getTopic() {
-    	return topic;
-    }
-    
-    void messageCallback(char *message);
 };
 
 class Core

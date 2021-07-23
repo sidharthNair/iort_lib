@@ -4,7 +4,7 @@
 
 */
 
-#include <mosquitto.h>
+#include <mqtt/async_client.h>
 #include <cpr/cpr.h>
 #include "iort_lib/iort.hpp"
 
@@ -24,7 +24,9 @@ namespace iort
 {
 
 static const std::string FUNCTION_URL = HTTP_ENDPOINT;
-static const std::string ENDPOINT_URL = MQTT_ENDPOINT;
+static const std::string ENDPOINT_URL = "ssl://"
+					  MQTT_ENDPOINT
+					  ":8883";
 
 inline bool inline_get(const std::string& uuid, Json::Value& ret,
                        int32_t timeout = 1000)
@@ -70,16 +72,7 @@ inline bool inline_query(const std::string& query_string, Json::Value& ret,
     return reader.parse(r.text, ret);
 }
 
-void on_connect(struct mosquitto *mosq, void *obj, int rc) {
-    if (rc) {
-        exit(-1);
-    }
-    mosquitto_subscribe(mosq, NULL, ((Subscriber *)obj)->getTopic().c_str(), 0);
-}
-
-void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
-    ((Subscriber *)obj)->messageCallback((char *)msg->payload);
-}
+int Subscriber::id = 0;
 
 Subscriber::Subscriber(const std::string& uuid_,
                        const std::function<void(Json::Value)>& cb_,
@@ -112,46 +105,82 @@ bool Subscriber::isRunning(void)
 bool Subscriber::start(void)
 {
     if (running) return false;
-    int rc, id = 1;
-    mosquitto_lib_init();
-    mosq = mosquitto_new("subscriber", true, this);
-    mosquitto_connect_callback_set(mosq, on_connect);
-    mosquitto_message_callback_set(mosq, on_message);
-    mosquitto_tls_set(mosq, "build/iort_lib/aws-root-ca.pem", NULL, "build/iort_lib/certificate.pem.crt", "build/iort_lib/private.pem.key", NULL);
-    rc = mosquitto_connect(mosq, ENDPOINT_URL.c_str(), 8883, 10);
-#ifdef DEBUG
-    if (rc) {
-    	  printf("Could not connect to broker: %d\n", rc);
-    }
-#endif
-    mosquitto_loop_start(mosq);
+    exitCond = new std::promise<void>();
+    subThread =
+        std::thread(&Subscriber::run, this, std::move(exitCond->get_future()));
     return true;
 }
 
 bool Subscriber::stop(void)
 {
     if (!running) return false;
-    mosquitto_loop_stop(mosq, true);
-    mosquitto_disconnect(mosq);
-    mosquitto_destroy(mosq);
-    mosquitto_lib_cleanup();
+    exitCond->set_value();
+    subThread.join();
     running = false;
     return true;
 }
 
-void Subscriber::messageCallback(char *message) {
-    Json::Value payload;
-    reader.parse((char *) message, payload);
-    cb_queue.push({cb, payload["data"] });
+void Subscriber::run(std::future<void> exitSig)
+{
+    mqtt::async_client cli(ENDPOINT_URL, "subscriber_ " + id++);
+    auto sslopts = mqtt::ssl_options_builder()
+               .private_key("build/iort_lib/private.pem.key")
+		.key_store("build/iort_lib/certificate.pem.crt")
+		.trust_store("build/iort_lib/aws-root-ca.pem")
+		.private_keypassword("")
+		.ssl_version(3)
+		.error_handler([](const std::string& msg) {
+			std::cerr << "SSL Error: " << msg << std::endl;
+		})
+					   .finalize();
+    auto connOpts = mqtt::connect_options_builder()
+		.clean_session(false)
+		.ssl(std::move(sslopts))
+		.finalize();
+    cli.start_consuming();
 #ifdef DEBUG
-    std::cout << "New message with topic " << msg->topic << " " << (char *) msg->payload << std::endl;
-    const auto epoch =
-	    std::chrono::system_clock::now().time_since_epoch();
-    const auto us =
-	    std::chrono::duration_cast<std::chrono::microseconds>(epoch);
-    int64_t then = payload["time"].asInt64();
-    std::cout << "latency: " << us.count() - then << "\n";
+    std::cout << "Connecting to the MQTT server " << ENDPOINT_URL << "..." << std::endl;
 #endif
+    auto tok = cli.connect(connOpts);
+    auto rsp = tok->get_connect_response();
+    if (!rsp.is_session_present())
+    	cli.subscribe(topic, 0)->wait();
+    const int32_t rateus = 1000;
+    auto cur_time = std::chrono::system_clock::now();
+#ifdef DEBUG
+    std::cout << "Waiting for messages on topic: '" << topic << "'" << std::endl;
+#endif
+    while (exitSig.wait_until(cur_time + std::chrono::microseconds(rateus)) ==
+           std::future_status::timeout)
+    {
+    	cur_time = std::chrono::system_clock::now();
+        Json::Value payload;
+        auto msg = cli.consume_message();
+        if (!msg) break;
+        reader.parse(msg->to_string(), payload);
+#ifdef DEBUG
+        const auto epoch =
+            std::chrono::system_clock::now().time_since_epoch();
+        const auto us =
+            std::chrono::duration_cast<std::chrono::microseconds>(epoch);
+        int64_t then = payload["time"].asInt64();
+        std::cout << "latency: " << us.count() - then << "\n";
+#endif
+        cb_queue.push({ cb, payload["data"] });
+    }
+    if (cli.is_connected()) {
+#ifdef DEBUG
+	std::cout << "\nShutting down and disconnecting from the MQTT server..." << std::endl;
+#endif
+	cli.unsubscribe(topic)->wait();
+	cli.stop_consuming();
+	cli.disconnect()->wait();
+	}
+    else {
+#ifdef DEBUG
+	std::cout << "\nClient was disconnected" << std::endl;
+#endif
+    } 
 }
 
 Core::Core()
@@ -169,7 +198,7 @@ Core::~Core()
 
 void Core::run(std::future<void> extiSig)
 {
-    while (true)
+    while (extiSig.wait_for(1ms) == std::future_status::timeout)
     {
         if (!callbackQueue.empty())
         {
