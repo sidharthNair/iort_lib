@@ -4,13 +4,17 @@
 
 */
 
+#include <mqtt/async_client.h>
 #include <cpr/cpr.h>
 #include "iort_lib/iort.hpp"
 
+#include <string>
 #include <chrono>
 using namespace std::chrono_literals;
 
-// #define DEBUG
+#include <config.h>
+
+//#define DEBUG
 #ifdef DEBUG
 #include <iostream>
 #include <deque>
@@ -18,9 +22,11 @@ using namespace std::chrono_literals;
 
 namespace iort
 {
-static const std::string FUNCTION_URL =
-    "https://5p1y6wnp3k.execute-api.us-west-2.amazonaws.com/default/"
-    "iort_lib_query";
+
+static const std::string FUNCTION_URL = HTTP_ENDPOINT;
+static const std::string ENDPOINT_URL = "ssl://"
+					  MQTT_ENDPOINT
+					  ":8883";
 
 inline bool inline_get(const std::string& uuid, Json::Value& ret,
                        int32_t timeout = 1000)
@@ -66,6 +72,8 @@ inline bool inline_query(const std::string& query_string, Json::Value& ret,
     return reader.parse(r.text, ret);
 }
 
+int Subscriber::id = 0;
+
 Subscriber::Subscriber(const std::string& uuid_,
                        const std::function<void(Json::Value)>& cb_,
                        CallbackQueue& cb_queue_, const int32_t timeout_,
@@ -76,6 +84,7 @@ Subscriber::Subscriber(const std::string& uuid_,
     msg_uuid = "null";
     cb = cb_;
     timeout = timeout_;
+    topic = "device/" + uuid_ + "/data";
     failure_count = 0;
     max_failure_count = failure_count_;
 
@@ -113,31 +122,61 @@ bool Subscriber::stop(void)
 
 void Subscriber::run(std::future<void> exitSig)
 {
-    const int32_t rateus = 100000;
-    auto cur_time = std::chrono::system_clock::now();
-    while (exitSig.wait_until(cur_time + std::chrono::microseconds(rateus)) ==
-           std::future_status::timeout)
-    {
-        cur_time = std::chrono::system_clock::now();
-        Json::Value payload;
-        if (inline_get(uuid, payload, 2000))
-        {
+    mqtt::async_client cli(ENDPOINT_URL, "client_" + std::to_string(id++));
+    auto sslopts = mqtt::ssl_options_builder()
+               .private_key("build/iort_lib/private.pem.key")
+		.key_store("build/iort_lib/certificate.pem.crt")
+		.trust_store("build/iort_lib/aws-root-ca.pem")
+		.private_keypassword("")
+		.ssl_version(3)
+		.error_handler([](const std::string& msg) {
+			std::cerr << "SSL Error: " << msg << std::endl;
+		})
+					   .finalize();
+    auto connOpts = mqtt::connect_options_builder()
+		.clean_session(true)
+		.ssl(std::move(sslopts))
+		.finalize();
+    cli.start_consuming();
 #ifdef DEBUG
-            const auto epoch =
-                std::chrono::system_clock::now().time_since_epoch();
-            const auto us =
-                std::chrono::duration_cast<std::chrono::microseconds>(epoch);
-            int64_t then = payload["time"].asInt64();
-            std::cout << "latency: " << us.count() - then << "\n";
+    std::cout << "Connecting to the MQTT server " << ENDPOINT_URL << "..." << std::endl;
 #endif
-            std::string new_msg_uuid = payload["msgid"].asString();
-            if (msg_uuid != new_msg_uuid)
-            {
-                msg_uuid = new_msg_uuid;
-                cb_queue.push({ cb, payload["data"] });
-            }
-        }
+    auto tok = cli.connect(connOpts);
+    auto rsp = tok->get_connect_response();
+    if (!rsp.is_session_present())
+    	cli.subscribe(topic, 1)->wait();
+#ifdef DEBUG
+    std::cout << cli.get_client_id() << " waiting for messages on topic: '" << topic << "'" << std::endl;
+#endif
+    while (exitSig.wait_for(1ms) == std::future_status::timeout)
+    {
+        Json::Value payload;
+        auto msg = cli.consume_message();
+        if (!msg) break;
+        reader.parse(msg->to_string(), payload);
+#ifdef DEBUG
+        const auto epoch =
+            std::chrono::system_clock::now().time_since_epoch();
+        const auto us =
+            std::chrono::duration_cast<std::chrono::microseconds>(epoch);
+        int64_t then = payload["time"].asInt64();
+        std::cout << "latency: " << us.count() - then << "\n";
+#endif
+        cb_queue.push({ cb, payload["data"] });
     }
+    if (cli.is_connected()) {
+#ifdef DEBUG
+	std::cout << "\nShutting down and disconnecting from the MQTT server..." << std::endl;
+#endif
+	cli.unsubscribe(topic)->wait();
+	cli.stop_consuming();
+	cli.disconnect()->wait();
+	}
+    else {
+#ifdef DEBUG
+	std::cout << "\nClient was disconnected" << std::endl;
+#endif
+    } 
 }
 
 Core::Core()

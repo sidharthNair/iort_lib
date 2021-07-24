@@ -39,6 +39,7 @@ set(iort_LIBS
 )
 
 set(iort_HDRS
+    inc/config.h
 )
 
 set(iort_SRCS
@@ -57,14 +58,22 @@ include_directories(
 ## Declare a C++ library
 add_library(${PROJECT_NAME}
     ${iort_LIBS}
+    ${iort_HDRS}
     ${iort_SRCS}
 )
 
 target_link_libraries(${PROJECT_NAME} 
     jsoncpp_lib
+    paho-mqttpp3
+    paho-mqtt3as
     cpr::cpr
     ${catkin_LIBRARIES}
 )
+
+## Copy Certificates into build directory
+FILE(COPY certs/aws-root-ca.pem DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+FILE(COPY certs/certificate.pem.crt DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+FILE(COPY certs/private.pem.key DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
 #############
 ## Install ##

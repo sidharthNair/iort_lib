@@ -174,15 +174,39 @@ const timestreamquery = new AWS.TimestreamQuery({ region: 'us-west-2' });
 
 #### Gateway Setup
 
-Click `Function Overview>Add Trigger` and select `API Gateway`. Choose `Create an API` from the dropdown menu, then select `HTTP API` for `API type` and `Open` for `Security`. Confirm by hitting `Add`. Now go back to your lambda function and navigate to `Configuration>Triggers`. Expand the API Gateway details and copy the `API endpoint` URL. Copy this URL into `src/iort_lib/iort.cpp` on the following declaration:
+Click `Function Overview>Add Trigger` and select `API Gateway`. Choose `Create an API` from the dropdown menu, then select `HTTP API` for `API type` and `Open` for `Security`. Confirm by hitting `Add`. Now go back to your lambda function and navigate to `Configuration>Triggers`. Expand the API Gateway details and copy the `API endpoint` URL. Copy this URL into `inc/config.h` on the following declaration:
 
 ```cpp
-static const std::string FUNCTION_URL = "copy url here";
+#define HTTP_ENDPOINT "copy url here"
 ```
+
+## Configuring the project for MQTT subscription
+
+For this section you will need your Thing's Rest API Endpoint URL ([AWS IoT Core page](https://us-west-2.console.aws.amazon.com/iot/home?region=us-west-2#/dashboard) and navigate to `Manage>Things>myEndpoint>Interact`) and certificates that you created when setting up [`iort_endpoint`](https://github.com/PaperFanz/iort_endpoint). 
+
+#### Endpoint URL
+
+In `inc/config.h` copy your Rest API Endpoint URL on the following declaration:
+
+```cpp
+#define MQTT_ENDPOINT "copy url here"
+```
+
+#### AWS Certificates
+
+Copy the certificate into `iort_lib/certs/certificate.pem.crt`.
+
+Copy the private key into `iort_lib/certs/private.pem.key`.
+
+Copy the root CA into `iort_lib/certs/aws-root-ca.pem`.
 
 ## Cloning and Building
 
-Simply clone the repository into your catkin workspace and run `catkin build`:
+This project depends on [`Eclipse Paho MQTT C++ Client Library`](https://github.com/eclipse/paho.mqtt.cpp) which is used for MQTT subscription. Follow the instructions to [build and install the Paho C Library](https://github.com/eclipse/paho.mqtt.cpp#building-the-paho-c-library) and [build and install the Paho C++ library](https://github.com/eclipse/paho.mqtt.cpp#building-the-paho-c-library-1)
+
+The project also depends on [`Curl for People`](https://github.com/whoshuu/cpr) which allows us to programmatically query the Timestream database, but this is included as a submodule in this repository.
+
+Clone the repository into your catkin workspace and run `catkin build`:
 
 ```sh
 cd ~/catkin_ws/src

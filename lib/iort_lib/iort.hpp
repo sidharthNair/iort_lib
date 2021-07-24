@@ -6,6 +6,7 @@
 
     Dependencies:
         - https://github.com/whoshuu/cpr (thank god no libcurl)
+        - https://github.com/eclipse/paho.mqtt.cpp (MQTT C++ Client)
         - https://github.com/open-source-parsers/jsoncpp
 
 */
@@ -30,7 +31,14 @@ typedef std::queue<CallbackQueueItem> CallbackQueue;
 
 class Subscriber
 {
-private:
+private:	
+    	
+    static int id;
+    	
+    std::string topic;
+    
+    Json::Reader reader;
+    	
     std::string uuid;
 
     std::string msg_uuid;
@@ -44,15 +52,15 @@ private:
     int32_t failure_count;
 
     int32_t max_failure_count;
-
+    
     std::promise<void>* exitCond;
-
+    
     std::thread subThread;
 
     bool running;
-
+    
     void run(std::future<void> exitSig);
-
+    
 public:
     Subscriber(const std::string& uuid_,
                const std::function<void(Json::Value)>& cb_,
