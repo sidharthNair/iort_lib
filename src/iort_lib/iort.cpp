@@ -5,6 +5,7 @@
 */
 
 #include <mqtt/async_client.h>
+#include <mqtt/message.h>
 #include <cpr/cpr.h>
 #include "iort_lib/iort.hpp"
 
@@ -151,8 +152,9 @@ void Subscriber::run(std::future<void> exitSig)
     while (exitSig.wait_for(1ms) == std::future_status::timeout)
     {
         Json::Value payload;
-        auto msg = cli.consume_message();
-        if (!msg) break;
+        mqtt::const_message_ptr msg;
+        if (!cli.try_consume_message_for(&msg, 1ms))
+            continue;
         reader.parse(msg->to_string(), payload);
 #ifdef DEBUG
         const auto epoch =
