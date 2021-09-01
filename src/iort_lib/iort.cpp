@@ -125,9 +125,9 @@ void Subscriber::run(std::future<void> exitSig)
 {
     mqtt::async_client cli(ENDPOINT_URL, "client_" + std::to_string(id++));
     auto sslopts = mqtt::ssl_options_builder()
-               .private_key("build/iort_lib/private.pem.key")
-		.key_store("build/iort_lib/certificate.pem.crt")
-		.trust_store("build/iort_lib/aws-root-ca.pem")
+               .private_key(KEY_PATH)
+		.key_store(CERT_PATH)
+		.trust_store(CA_PATH)
 		.private_keypassword("")
 		.ssl_version(3)
 		.error_handler([](const std::string& msg) {
@@ -153,7 +153,7 @@ void Subscriber::run(std::future<void> exitSig)
     {
         Json::Value payload;
         mqtt::const_message_ptr msg;
-        if (!cli.try_consume_message_for(&msg, 1ms))
+        if (!cli.try_consume_message_for(&msg, 10ms))
             continue;
         reader.parse(msg->to_string(), payload);
 #ifdef DEBUG

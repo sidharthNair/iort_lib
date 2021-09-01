@@ -15,6 +15,14 @@ find_package(jsoncpp REQUIRED)
 ## Local dependencies
 add_subdirectory(dep)
 
+set(CA_PATH "${PROJECT_SOURCE_DIR}/certs/aws-root-ca.pem")
+set(CERT_PATH "${PROJECT_SOURCE_DIR}/certs/certificate.pem.crt")
+set(KEY_PATH "${PROJECT_SOURCE_DIR}/certs/private.pem.key")
+
+add_definitions(-DCA_PATH=\"${CA_PATH}\")
+add_definitions(-DCERT_PATH=\"${CERT_PATH}\")
+add_definitions(-DKEY_PATH=\"${KEY_PATH}\")
+
 ###################################
 ## catkin specific configuration ##
 ###################################
@@ -69,11 +77,6 @@ target_link_libraries(${PROJECT_NAME}
     cpr::cpr
     ${catkin_LIBRARIES}
 )
-
-## Copy Certificates into build directory
-FILE(COPY certs/aws-root-ca.pem DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-FILE(COPY certs/certificate.pem.crt DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
-FILE(COPY certs/private.pem.key DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
 
 #############
 ## Install ##
