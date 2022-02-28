@@ -3,5 +3,6 @@
 
 #define HTTP_ENDPOINT "copy url here"
 #define MQTT_ENDPOINT "copy url here"
+#define UUID "copy UUID here"
 
 #endif

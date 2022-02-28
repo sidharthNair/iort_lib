@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ## Find catkin macros and libraries
-find_package(catkin REQUIRED)
+find_package(catkin REQUIRED roscpp std_msgs genmsg)
 
 ## System dependencies are found with CMake's conventions
 find_package(jsoncpp REQUIRED)
@@ -52,6 +52,7 @@ set(iort_HDRS
 
 set(iort_SRCS
     src/${PROJECT_NAME}/iort.cpp
+    src/${PROJECT_NAME}/publisher.cpp
 )
 
 ## Specify additional locations of header files
@@ -63,6 +64,8 @@ include_directories(
     ${catkin_INCLUDE_DIRS}
 )
 
+add_executable(publisher src/${PROJECT_NAME}/publisher.cpp)
+
 ## Declare a C++ library
 add_library(${PROJECT_NAME}
     ${iort_LIBS}
@@ -70,11 +73,18 @@ add_library(${PROJECT_NAME}
     ${iort_SRCS}
 )
 
-target_link_libraries(${PROJECT_NAME} 
+target_link_libraries(${PROJECT_NAME}
     jsoncpp_lib
     paho-mqttpp3
     paho-mqtt3as
     cpr::cpr
+    ${catkin_LIBRARIES}
+)
+
+target_link_libraries(publisher
+    jsoncpp_lib
+    paho-mqttpp3
+    paho-mqtt3as
     ${catkin_LIBRARIES}
 )
 
