@@ -192,6 +192,16 @@ In `inc/config.h` copy your Rest API Endpoint URL on the following declaration:
 #define MQTT_ENDPOINT "copy url here"
 ```
 
+#### Device UUID
+
+*Set this if you would like to use the ROS publisher node to convert MQTT messages to rostopics. 
+
+In `inc/config.h` copy the UUID of the device you want to subscribe to.
+
+```cpp
+#define UUID "copy UUID here"
+```
+
 #### AWS Certificates
 
 Copy the certificate into `iort_lib/certs/certificate.pem.crt`.
